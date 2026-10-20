@@ -1,0 +1,23 @@
+# Hasil kompilasi dan executable Go
+pinjamkampus
+pinjamkampus.exe
+*.exe
+*.exe~
+*.test
+*.out
+
+# Hasil pengujian dan profiling
+coverage.txt
+coverage.html
+*.prof
+
+# File sementara editor dan sistem operasi
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# Dokumen lampiran lokal yang bukan bagian kode proyek
+upload/
