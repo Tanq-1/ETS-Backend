@@ -252,3 +252,91 @@ func TestCheckpoint2B7PermintaanBersamaanTidakMelebihiStok(t *testing.T) {
 	}
 	cekKetersediaanTes(t, h, []int{1, 0, 0, 1, 1, 1, 1, 1})
 }
+
+// CR-B hanya menambahkan bentrok_dengan pada POST yang menghasilkan 409 kapasitas.
+func TestCRBDaftarBentrokPOST409(t *testing.T) {
+	h := NewHandler()
+	buatSumberTes(t, h, 1)
+	kirim(t, h, "POST", "/peminjaman", bodyPeminjamanTes("Rina", 2, 3, 1), 201) // ID 1
+	kirim(t, h, "POST", "/peminjaman", bodyPeminjamanTes("Budi", 5, 6, 1), 201) // ID 2
+	kirim(t, h, "POST", "/peminjaman", bodyPeminjamanTes("Siti", 7, 8, 1), 201) // ID 3
+
+	// Peminjaman ID 4 pada tanggal lain dan ID 5 pada sumber daya lain tidak relevan.
+	lainTanggal := strings.Replace(bodyPeminjamanTes("Tanggal lain", 3, 5, 1), tanggalTes, "2026-11-03", 1)
+	kirim(t, h, "POST", "/peminjaman", lainTanggal, 201)
+	kirim(t, h, "POST", "/sumber-daya", `{"nama":"Ruang B","jenis":"ruang","stok":1}`, 201)
+	lainSumber := strings.Replace(bodyPeminjamanTes("Ruang B", 3, 5, 1), `"sumber_daya_id":1`, `"sumber_daya_id":2`, 1)
+	kirim(t, h, "POST", "/peminjaman", lainSumber, 201)
+
+	kasus := []struct {
+		nama           string
+		mulai, selesai int
+		ingin           []int
+	}{
+		{"dua_irisan", 3, 5, []int{1, 2}},
+		{"satu_irisan", 1, 2, []int{1}},
+		{"irisan_di_akhir", 6, 7, []int{2, 3}},
+	}
+	for _, tc := range kasus {
+		t.Run(tc.nama, func(t *testing.T) {
+			// Map Go tidak memiliki urutan tetap; daftar ID harus stabil dan terurut.
+			for percobaan := 0; percobaan < 10; percobaan++ {
+				res := kirim(t, h, "POST", "/peminjaman", bodyPeminjamanTes("Pemohon", tc.mulai, tc.selesai, 1), 409)
+				var payload struct {
+					Error         string `json:"error"`
+					BentrokDengan []int  `json:"bentrok_dengan"`
+				}
+				if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+					t.Fatalf("JSON 409 tidak valid: %v", err)
+				}
+				if payload.Error == "" || len(payload.BentrokDengan) != len(tc.ingin) {
+					t.Fatalf("respons 409 tidak sesuai: %+v", payload)
+				}
+				for i, id := range tc.ingin {
+					if payload.BentrokDengan[i] != id {
+						t.Fatalf("bentrok_dengan=%v, ingin %v", payload.BentrokDengan, tc.ingin)
+					}
+				}
+			}
+		})
+	}
+
+	// POST sukses, POST invalid, 404, dan PUT 409 tidak boleh memiliki field baru.
+	cekTanpaBentrok := func(method, path, body string, status int) {
+		t.Helper()
+		res := kirim(t, h, method, path, body, status)
+		var objek map[string]json.RawMessage
+		if err := json.Unmarshal(res.Body.Bytes(), &objek); err != nil {
+			t.Fatalf("respons tidak valid: %v", err)
+		}
+		if _, ada := objek["bentrok_dengan"]; ada {
+			t.Fatalf("%s %s (status %d) tidak boleh berisi bentrok_dengan", method, path, status)
+		}
+	}
+	cekTanpaBentrok("POST", "/peminjaman", bodyPeminjamanTes("Tersedia", 1, 1, 1), 201)
+	cekTanpaBentrok("POST", "/peminjaman", `{"peminjam":"Tidak lengkap"}`, 400)
+	cekTanpaBentrok("GET", "/sumber-daya/99", "", 404)
+	cekTanpaBentrok("PUT", "/peminjaman/3", bodyPeminjamanTes("Siti", 3, 5, 1), 409)
+
+	list := kirim(t, h, "GET", "/peminjaman", "", 200)
+	var semua []Peminjaman
+	if err := json.Unmarshal(list.Body.Bytes(), &semua); err != nil || len(semua) != 6 {
+		t.Fatalf("POST gagal tidak boleh menambah peminjaman: %+v, err=%v", semua, err)
+	}
+}
+
+func TestCRBDaftarBentrokKetikaKapasitasSebagianTerpakai(t *testing.T) {
+	h := NewHandler()
+	buatSumberTes(t, h, 3)
+	kirim(t, h, "POST", "/peminjaman", bodyPeminjamanTes("Rina", 2, 4, 2), 201)
+	kirim(t, h, "POST", "/peminjaman", bodyPeminjamanTes("Budi", 3, 5, 1), 201)
+	res := kirim(t, h, "POST", "/peminjaman", bodyPeminjamanTes("Siti", 3, 3, 1), 409)
+	var payload struct {
+		Error         string `json:"error"`
+		BentrokDengan []int  `json:"bentrok_dengan"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil || payload.Error == "" ||
+		len(payload.BentrokDengan) != 2 || payload.BentrokDengan[0] != 1 || payload.BentrokDengan[1] != 2 {
+		t.Fatalf("daftar ID bentrok pada stok parsial salah: %+v, err=%v", payload, err)
+	}
+}

@@ -203,7 +203,13 @@ func (s *store) tambahPeminjaman(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.adaBentrok(item, 0) {
-		writeError(w, http.StatusConflict, "kapasitas slot tidak mencukupi")
+		writeJSON(w, http.StatusConflict, struct {
+			Error         string `json:"error"`
+			BentrokDengan []int  `json:"bentrok_dengan"`
+		}{
+			Error:         "kapasitas slot tidak mencukupi",
+			BentrokDengan: s.idPeminjamanBentrok(item),
+		})
 		return
 	}
 	item.ID = s.nextPinjam
@@ -305,6 +311,23 @@ func (s *store) adaBentrok(calon Peminjaman, exceptID int) bool {
 		}
 	}
 	return false
+}
+
+// idPeminjamanBentrok hanya dipanggil setelah POST terbukti gagal karena kapasitas.
+// Pemanggil sudah memegang mutex agar daftar ID berasal dari data yang sama.
+func (s *store) idPeminjamanBentrok(calon Peminjaman) []int {
+	ids := make([]int, 0)
+	for _, lama := range s.peminjaman {
+		if lama.Status != "aktif" || lama.SumberDayaID != calon.SumberDayaID ||
+			lama.Tanggal != calon.Tanggal {
+			continue
+		}
+		if lama.SlotMulai <= calon.SlotSelesai && calon.SlotMulai <= lama.SlotSelesai {
+			ids = append(ids, lama.ID)
+		}
+	}
+	sort.Ints(ids)
+	return ids
 }
 
 func (s *store) ubahPeminjaman(w http.ResponseWriter, r *http.Request) {

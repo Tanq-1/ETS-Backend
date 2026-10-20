@@ -13,8 +13,7 @@
 - [x] B6 Ubah dan hapus
 - [x] B7 Aman untuk permintaan bersamaan
 - [x] Fitur khas persona
-- [ ] Change request
+- [x] Change request (CR-B: ID peminjaman penyebab bentrok pada POST 409)
 
 ## Yang belum selesai
-- Change request belum diterima atau dikerjakan.
-- B1-B7 dan fitur Persona A sudah diimplementasikan beserta tes otomatis, tetapi tes belum dapat dijalankan di lingkungan pembuatan karena program Go belum tersedia. Jalankan `go test ./...`, `go test -race ./...`, `go build ./...`, dan `go vet ./...` pada komputer yang memiliki Go 1.22 atau lebih baru.
+Semoga semuanya sudah selesai

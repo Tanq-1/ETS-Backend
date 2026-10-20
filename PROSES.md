@@ -28,4 +28,8 @@ Saya memilih `map` untuk penyimpanan utama. Pilihan lainnya adalah `slice`, teta
 - Penyebab dan solusi: Kode lama hanya memeriksa apakah nilai hasil `query.Get()` tidak kosong. Kode diganti untuk memeriksa keberadaan kunci query, lalu melakukan `strconv.Atoi()` terhadap nilainya. Karena string kosong tidak bisa dikonversi ke angka, responsnya menjadi 400 JSON.
 
 ## 5. Change request
-(Apa yang diminta, bagian kode mana yang kamu ubah, dan satu keputusan desain yang kamu ambil.)
+CR-B dari tim frontend meminta agar respons `POST /peminjaman` yang ditolak dengan status 409 karena slot atau kapasitas penuh menambahkan `bentrok_dengan`, yaitu daftar ID peminjaman yang menghalangi. ID harus terurut naik; peminjaman pada tanggal, sumber daya, atau slot yang tidak beririsan tidak ikut. Respons sukses, error lainnya, dan `PUT /peminjaman/{id}` tidak boleh berubah.
+
+Saya mengubah handler `tambahPeminjaman` pada `api.go`. Ketika `adaBentrok` menemukan kapasitas tidak cukup, handler tetap mengembalikan `error` lalu menambahkan `bentrok_dengan` dari helper baru `idPeminjamanBentrok`. Helper tersebut hanya mengambil peminjaman aktif pada sumber daya dan tanggal yang sama dengan irisan slot, kemudian mengurutkan ID menggunakan `sort.Ints`.
+
+Keputusan desain saya adalah **memisahkan pemeriksaan kapasitas dari pengumpulan daftar ID**. Pemeriksaan kapasitas per slot tetap menentukan apakah permintaan harus ditolak; daftar ID baru dihitung jika POST memang menghasilkan 409. Dengan begitu, aturan bentrok B5 tidak berubah dan respons PUT juga tetap seperti sebelumnya. Kedua operasi dilakukan ketika mutex masih terkunci supaya hasil daftar ID sesuai dengan kondisi yang menyebabkan penolakan. Pengujian CR-B ditambahkan ke `api_test.go`, tetapi pelaksanaannya masih menunggu lingkungan yang memiliki Go.
